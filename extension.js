@@ -1,4 +1,5 @@
 const vscode = require("vscode");
+// import vscode from "vscode";
 let editor;
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
@@ -35,39 +36,48 @@ function activate(context) {
       "solidity",
     ];
     if (supportedLangs.includes(lang)) {
-      let selection = editor.selection;
-      let line = editor.document.lineAt(selection.active.line);
-      let text = editor.document.getText(selection);
-      let dest = selection.active;
-      dest = dest.translate(0, -dest.character);
+      let selections = editor.selections;
+      vscode.window.showInformationMessage(
+        `Logging ${selections.length} selection(s) in ${lang} language.`
+      );
+      const edits = [];
+      selections.forEach((selection) => {
+        let line = editor.document.lineAt(selection.active.line);
+        let text = editor.document.getText(selection);
+        let dest = selection.active;
+        dest = dest.translate(0, -dest.character);
 
-      let startSpace = " ".repeat(line.firstNonWhitespaceCharacterIndex);
-      const wrapChar = text.match(/\r\n|\r|\n/g) ? "`" : "'";
-      let textEsc = "";
-      if (typeof text === "string") {
-        textEsc = wrapChar + text.replace(/\'/g, "\\'") + " :" + wrapChar;
-      } else {
-        textEsc = JSON.stringify(text) + ":";
-      }
-      const { wrapperExpression, invertPosition } =
-        vscode.workspace.getConfiguration("consoleLog");
-      const consoleValue = wrapperExpression
-        ? wrapperExpression.replace("$", text)
-        : text;
-      let log = startSpace + `console.log(${textEsc}, ${consoleValue});`;
+        let startSpace = " ".repeat(line.firstNonWhitespaceCharacterIndex);
+        const wrapChar = text.match(/\r\n|\r|\n/g) ? "`" : "'";
+        let textEsc = "";
+        if (typeof text === "string") {
+          textEsc = wrapChar + text.replace(/\'/g, "\\'") + " :" + wrapChar;
+        } else {
+          textEsc = JSON.stringify(text) + ":";
+        }
+        const { wrapperExpression, invertPosition } =
+          vscode.workspace.getConfiguration("consoleLog");
+        const consoleValue = wrapperExpression
+          ? wrapperExpression.replace("$", text)
+          : text;
+        let log = startSpace + `console.log(${textEsc}, ${consoleValue});`;
 
-      if (invertPosition) {
-        before = !before;
-      }
+        if (invertPosition) {
+          before = !before;
+        }
 
-      if (before) {
-        log += "\n";
-      } else {
-        dest = dest.translate(0, line.text.length);
-        log = "\n" + log;
-      }
+        if (before) {
+          log += "\n";
+        } else {
+          dest = dest.translate(0, line.text.length);
+          log = "\n" + log;
+        }
+        edits.push({ dest, log });
+      });
       editor.edit((editBuilder) => {
-        editBuilder.insert(dest, log);
+        edits.forEach(({ dest, log }) => {
+          editBuilder.insert(dest, log);
+        });
       });
     } else if (lang == "dart") {
       let selection = editor.selection;
