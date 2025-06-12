@@ -37,6 +37,13 @@ function activate(context) {
     if (supportedLangs.includes(lang)) {
       let selections = editor.selections;
       const edits = [];
+      const { wrapperExpression, invertPosition } =
+        vscode.workspace.getConfiguration("consoleLog");
+
+      if (invertPosition) {
+        before = !before;
+      }
+      
       selections.forEach((selection) => {
         let line = editor.document.lineAt(selection.active.line);
         let text = editor.document.getText(selection);
@@ -51,16 +58,10 @@ function activate(context) {
         } else {
           textEsc = JSON.stringify(text) + ":";
         }
-        const { wrapperExpression, invertPosition } =
-          vscode.workspace.getConfiguration("consoleLog");
         const consoleValue = wrapperExpression
           ? wrapperExpression.replace("$", text)
           : text;
         let log = startSpace + `console.log(${textEsc}, ${consoleValue});`;
-
-        if (invertPosition) {
-          before = !before;
-        }
 
         if (before) {
           log += "\n";
