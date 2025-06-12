@@ -1,5 +1,4 @@
 const vscode = require("vscode");
-// import vscode from "vscode";
 let editor;
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
@@ -37,9 +36,6 @@ function activate(context) {
     ];
     if (supportedLangs.includes(lang)) {
       let selections = editor.selections;
-      vscode.window.showInformationMessage(
-        `Logging ${selections.length} selection(s) in ${lang} language.`
-      );
       const edits = [];
       selections.forEach((selection) => {
         let line = editor.document.lineAt(selection.active.line);
