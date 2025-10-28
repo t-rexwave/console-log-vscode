@@ -25,7 +25,33 @@ function activate(context) {
     editor = vscode.window.activeTextEditor;
     let lang = editor.document.languageId;
     console.log("Logging for lang:", lang);
-    let supportedLangs = [
+    const edits = [];
+    // if (supportedLangs.includes(lang)) {
+    let selections = editor.selections;
+    const { wrapperExpression, invertPosition } =
+      vscode.workspace.getConfiguration("consoleLog");
+
+    if (invertPosition) {
+      before = !before;
+    }
+
+    selections.forEach((selection) => {
+      let line = editor.document.lineAt(selection.active.line);
+      let text = editor.document.getText(selection);
+      let dest = selection.active;
+      edits.push(addLog(line, text, dest, before, wrapperExpression));
+    });
+    editor.edit((editBuilder) => {
+      edits.forEach(({ dest, log }) => {
+        editBuilder.insert(dest, log);
+      });
+    });
+  }
+
+  function addLog(line, text, dest, before, wrapperExpression) {
+    let lang = editor.document.languageId;
+
+    let jsLikeLangs = [
       "javascript",
       "typescript",
       "javascriptreact",
@@ -34,53 +60,31 @@ function activate(context) {
       "svelte",
       "solidity",
     ];
-    if (supportedLangs.includes(lang)) {
-      let selections = editor.selections;
-      const edits = [];
-      const { wrapperExpression, invertPosition } =
-        vscode.workspace.getConfiguration("consoleLog");
+    let pythonLikeLangs = ["python", "ruby", "gdscript"];
+    if (jsLikeLangs.includes(lang)) {
+      dest = dest.translate(0, -dest.character);
 
-      if (invertPosition) {
-        before = !before;
+      let startSpace = " ".repeat(line.firstNonWhitespaceCharacterIndex);
+      const wrapChar = text.match(/\r\n|\r|\n/g) ? "`" : "'";
+      let textEsc = "";
+      if (typeof text === "string") {
+        textEsc = wrapChar + text.replace(/\'/g, "\\'") + " :" + wrapChar;
+      } else {
+        textEsc = JSON.stringify(text) + ":";
       }
-      
-      selections.forEach((selection) => {
-        let line = editor.document.lineAt(selection.active.line);
-        let text = editor.document.getText(selection);
-        let dest = selection.active;
-        dest = dest.translate(0, -dest.character);
+      const consoleValue = wrapperExpression
+        ? wrapperExpression.replace("$", text)
+        : text;
+      let log = startSpace + `console.log(${textEsc}, ${consoleValue});`;
 
-        let startSpace = " ".repeat(line.firstNonWhitespaceCharacterIndex);
-        const wrapChar = text.match(/\r\n|\r|\n/g) ? "`" : "'";
-        let textEsc = "";
-        if (typeof text === "string") {
-          textEsc = wrapChar + text.replace(/\'/g, "\\'") + " :" + wrapChar;
-        } else {
-          textEsc = JSON.stringify(text) + ":";
-        }
-        const consoleValue = wrapperExpression
-          ? wrapperExpression.replace("$", text)
-          : text;
-        let log = startSpace + `console.log(${textEsc}, ${consoleValue});`;
-
-        if (before) {
-          log += "\n";
-        } else {
-          dest = dest.translate(0, line.text.length);
-          log = "\n" + log;
-        }
-        edits.push({ dest, log });
-      });
-      editor.edit((editBuilder) => {
-        edits.forEach(({ dest, log }) => {
-          editBuilder.insert(dest, log);
-        });
-      });
+      if (before) {
+        log += "\n";
+      } else {
+        dest = dest.translate(0, line.text.length);
+        log = "\n" + log;
+      }
+      return { dest, log };
     } else if (lang == "dart") {
-      let selection = editor.selection;
-      let line = editor.document.lineAt(selection.active.line);
-      let text = editor.document.getText(selection);
-      let dest = selection.active;
       dest = dest.translate(0, -dest.character);
 
       let startSpace = " ".repeat(line.firstNonWhitespaceCharacterIndex);
@@ -109,14 +113,8 @@ function activate(context) {
         dest = dest.translate(0, line.text.length);
         log = "\n" + log;
       }
-      editor.edit((editBuilder) => {
-        editBuilder.insert(dest, log);
-      });
+      return { dest, log };
     } else if (lang == "go") {
-      let selection = editor.selection;
-      let line = editor.document.lineAt(selection.active.line);
-      let text = editor.document.getText(selection);
-      let dest = selection.active;
       dest = dest.translate(0, -dest.character);
 
       let startSpace = "\t".repeat(line.firstNonWhitespaceCharacterIndex);
@@ -147,17 +145,47 @@ function activate(context) {
         dest = dest.translate(0, line.text.length);
         log = "\n" + log;
       }
-      editor.edit((editBuilder) => {
-        editBuilder.insert(dest, log);
-      });
-    }
-  }
+      return { dest, log };
+    } else if (pythonLikeLangs.includes(lang)) {
+      dest = dest.translate(0, -dest.character);
 
-  context.subscriptions.push(consoleLog);
-  context.subscriptions.push(consoleLogBefore);
+      let startSpace = "\t".repeat(line.firstNonWhitespaceCharacterIndex);
+      console.log('line :', line);
+      let finalChar = line.text.charAt(line.text.length - 1);
+      if (!before && finalChar === ":") {
+        startSpace += "\t";
+      }
+      const wrapChar = text.match(/\r\n|\r|\n/g) ? '"""' : "'";
+      let textEsc = "";
+      if (typeof text === "string") {
+        textEsc = wrapChar + text.replace(/\'/g, "\\'") + wrapChar;
+      } else {
+        textEsc = JSON.stringify(text);
+      }
+      const consoleValue = wrapperExpression
+        ? wrapperExpression.replace("$", text)
+        : text;
+      let log = startSpace + `print(${textEsc}, ${consoleValue})`;
+
+      if (before) {
+        log += "\n";
+      } else {
+        dest = dest.translate(0, line.text.length);
+        log = "\n" + log;
+      }
+      return { dest, log };
+    } else {
+      vscode.window.showInformationMessage(
+        `Language ${lang} is not supported yet.`
+      );
+    }
+
+    context.subscriptions.push(consoleLog);
+    context.subscriptions.push(consoleLogBefore);
+  }
 }
 exports.activate = activate;
 
 // this method is called when your extension is deactivated
-function deactivate() {}
+function deactivate() { }
 exports.deactivate = deactivate;
